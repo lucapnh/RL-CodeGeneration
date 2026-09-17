@@ -53,7 +53,7 @@ conda activate code_gen
 Install syncode seperately 
 
 ```bash
-pip install --no-dep syncode==0.4.16
+pip install --no-deps syncode==0.4.16
 ```
 
 If using DeepSpeed, ensure compatibility with your CUDA and PyTorch versions.
@@ -125,4 +125,41 @@ Pass@K (EvalPlus / MBPP)
 ```bash
 accelerate launch --config-file config/accelerate.yml main.py --mode evaluate_passk --param ppo_code_gen --checkpoint checkpoint-XXX
 ```
+
+---
+
+## Supervised Fine-Tuning (SFT)
+
+A supervised fine-tuning baseline for comparison against the PPO/RLOO results above, reproducing the SFT recipe used for the paper's own reference checkpoints (PEFT/LoRA, constant-with-warmup schedule, effective batch size 8, 5 epochs, 2048-token sequences) via TRL's `SFTTrainer`. It's kept as a standalone package under `sft/`, deliberately separate from `main.py` / `utils.py` / `wrappers/` / `config/hyperparams.json`, so it can't destabilize the RL framework above.
+
+Train (single GPU, no `accelerate launch` needed — this is a much lighter job than PPO's dual policy+critic training):
+
+```bash
+python -m sft.train_sft
+```
+
+Hyperparameters live in `sft/hyperparams.json` (separate from the RL framework's `config/hyperparams.json`). Checkpoints land at `savings/<model>/<dataset>/sft/checkpoint-N/policy/`.
+
+Evaluate an SFT checkpoint with the same evaluation commands as above, referencing it by its `sft/` subpath:
+
+```bash
+python main.py --mode evaluate_roboeval --param ppo --framework_params robo --checkpoint sft/checkpoint-N
+```
+
+(`--param ppo` just selects the matching model/dataset identity from `config/hyperparams.json` — it doesn't imply anything PPO-specific about the checkpoint being loaded.)
+
+---
+
+## Comparing Results
+
+`analysis/compare_results.py` plots a pass@1 comparison and an outcome-breakdown chart (Success / CompletionError / RobotExecutionError / PythonError) across any number of evaluated checkpoints — SFT, PPO, RLOO, different model sizes — reading directly from the `pass1/result.csv` and `error_breakdown/result.csv` files RoboEval evaluation already produces:
+
+```bash
+python analysis/compare_results.py \
+  --result "PPO=roboeval/Abgabe/Qwen-Abgabe/Qwen2.5-Coder-1.5B-Instruct/checkpoint-1200" \
+  --result "SFT=roboeval/Qwen/Qwen2.5-Coder-1.5B-Instruct/sft/checkpoint-1250" \
+  --out comparison.pdf
+```
+
+Add more `--result LABEL=PATH` pairs to put additional methods or model sizes on the same chart.
 

@@ -97,7 +97,11 @@ def evaluate_program(taskname, program, tests) -> Union[bool, str]:
         constraint_cb = test["test"]
         should_timeout = test["timeout"]
         try:
-            (trace_elements, status) = run_simulation(taskname, program, num_state, 1)
+            # Was hardcoded to 1 second, which was found to falsely time out even
+            # simple, correct programs under full-parallelism eval load (confirmed:
+            # a program that timed out at 1s succeeded at 10s with no code change).
+            # Raised to 15s for headroom above that empirically-confirmed threshold.
+            (trace_elements, status) = run_simulation(taskname, program, num_state, 15)
             if not should_timeout and status == "timeout":
                 return False, "PythonError"
             
