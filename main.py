@@ -18,7 +18,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--mode', default="fine_tune", choices=["fine_tune", "evaluate_roboeval", "evaluate_passk", "generate_completion"])
-    parser.add_argument('--param', default="ppo_code_gen", choices=["ppo", "ppo_code_gen"])
+    parser.add_argument('--param', default="ppo_code_gen",
+                         help="Top-level block name in config/hyperparams.json, e.g. ppo, ppo_code_gen, "
+                              "or any additional block (sft_robo_7b_reference, sft_code_gen_1.5b, ...).")
     parser.add_argument('--framework_params', default="code_gen", choices=["code_gen", "robo"])
     parser.add_argument("--checkpoint", type=str, default=None)
 

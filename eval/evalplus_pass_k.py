@@ -67,18 +67,36 @@ def generate_evaluate(tokenizer, save_dir, generation_func):
             problems = get_mbpp_plus()
             prompts, task_ids = get_all_generation(tokenizer, problems)
 
-            batch_size = 32
+            # Lowered from 32: at response_length=1024 (see config/hyperparams.json's
+            # sft_code_gen_1.5b/7b), per-sequence KV cache is big enough at batch 32 to
+            # OOM a single GPU (ZeRO stage 2 in config/deepspeed.json shards optimizer/
+            # gradient state, not model params, so it doesn't help during pure generation
+            # - the only lever here is batch size). Pure throughput/memory knob, does not
+            # change which completions get generated or scored. (8 confirmed to use only
+            # ~52/82GB on a 7B model - raised to 16 for speed; watch nvidia-smi and drop
+            # back down if it climbs close to the GPU's ceiling.)
+            batch_size = 16
             unprocessed_programs, _ = generation_func(prompts, batch_size, MAX_LENGTH)
 
             samples = []
-            for program, task_id in zip(unprocessed_programs, task_ids):
-                program = extract_python_code(program)
+            raw_samples = []
+            for raw_program, task_id in zip(unprocessed_programs, task_ids):
+                program = extract_python_code(raw_program)
                 samples.append({
                     "task_id": task_id,
                     "completion": program
                 })
+                # Debug-only: the raw, pre-extraction text, so an empty "completion"
+                # above (extract_python_code found no "```python" marker) can be
+                # diagnosed - e.g. the model answering without a fence, or with a
+                # bare "```" - without needing to re-run generation. Not read by
+                # evalplus itself, purely for inspection.
+                raw_samples.append({"task_id": task_id, "raw": raw_program})
 
             os.makedirs(save_dir, exist_ok=True)
+            with open(project_path + save_dir + "/evalplus_raw_completions.jsonl", "w", encoding="utf-8") as f:
+                for row in raw_samples:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
             write_jsonl(samples_path, samples)
 
         if os.path.exists(results_path):
